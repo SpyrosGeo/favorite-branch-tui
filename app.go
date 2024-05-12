@@ -17,80 +17,44 @@ func main() {
 	// Initialize TUI application
 	app = tview.NewApplication()
 
-	modal := func(p tview.Primitive, width, height int) tview.Primitive {
-		return tview.NewFlex().
-			AddItem(nil, 0, 1, false).
-			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-				AddItem(nil, 0, 1, false).
-				AddItem(p, height, 1, true).
-				AddItem(nil, 0, 1, false), width, 1, true).
-			AddItem(nil, 0, 1, false)
-	}
-	statusBar = tview.NewTextView().
-		SetTextAlign(tview.AlignCenter).
-		SetText("")
-
-		// Fetch and display Git branches
-		// Create the layout
+	//Fetch and display Git branches
 	branchesList, err := getSavedBranches()
-	if err != nil {
+	//Fetch general commands
+	generalCommandsList, cmdErr := getGeneralCommands()
+	if err != nil || cmdErr != nil {
 		panic(err)
 	}
+	//createn primitive to use for secitons
+	newPrimitive := func(text string) tview.Primitive {
+		return tview.NewTextView().
+			SetTextAlign(tview.AlignCenter).
+			SetText(text)
+	}
 
-	pages := tview.NewPages()
-	pages.AddPage("background", branchesList, true, true).AddPage("modal", modal(statusBar, 40, 10), true, true)
+	title := getTitle()
+	grid := tview.NewGrid().
+		SetRows(3, 0, 3).
+		SetColumns(30, 0, 30).
+		SetBorders(true).
+		AddItem(newPrimitive(title), 0, 0, 1, 3, 0, 0, false).
+		AddItem(generalCommandsList, 2, 0, 1, 3, 0, 0, false)
+	grid.AddItem(branchesList, 1, 0, 1, 1, 0, 100, false)
 
-	// Set the root layout and run the application
-	if err := app.SetRoot(branchesList, true).Run(); err != nil {
+	if err := app.SetRoot(grid, true).Run(); err != nil {
 		panic(err)
-	}
-}
-
-func updateBranchesList(branchesList *tview.List) {
-	// Open favorite branches file
-	file, err := os.OpenFile("favorite_branches.txt", os.O_RDWR|os.O_CREATE, 0644)
-	if err != nil {
-		showMessage("Error opening file: " + err.Error())
-		return
-	}
-	defer file.Close()
-
-	// Maintain a set to store unique branch names
-	seen := make(map[string]bool)
-
-	// Read branch names from file
-	scanner := bufio.NewScanner(file)
-	empty := true
-	for scanner.Scan() {
-		branchName := strings.TrimSpace(scanner.Text())
-		if branchName != "" && !seen[branchName] {
-			branchesList.AddItem(branchName, "", 0, nil)
-			seen[branchName] = true
-			empty = false
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		showMessage("Error reading file: " + err.Error())
-		return
-	}
-
-	if empty {
-		branchesList.AddItem("No favorite branches", "", 0, nil)
 	}
 }
 
 func checkoutBranch(branchName string) {
 	// Execute "git checkout" command to switch branches
 	fmt.Println("inside checkoutBranch")
-	showMessage(branchName)
-	// cmd := exec.Command("git", "checkout", branchName)
-	// output, err := cmd.CombinedOutput()
-	// if err != nil {
-	// 	showMessage("Error: " + err.Error())
-	// 	return
-	// }
-	// showMessage(string(output))
+	cmd := exec.Command("git", "checkout", branchName)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		showMessage("Error: " + err.Error())
+		return
+	}
+	showMessage(string(output))
 }
 
 func getCurrentBranch() (string, error) {
@@ -123,20 +87,6 @@ func saveBranchToFavorites() {
 
 func writeToDB(currentBranch string) error {
 	filename := "favorite_branches.txt"
-	// file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	// if err != nil {
-	// 	return err
-	// }
-	// defer file.Close()
-	//
-	// // Write the text to the file
-	// _, err = file.WriteString(currentBranch)
-	// if err != nil {
-	// 	return err
-	// }
-	//
-	// return nil
-	// Read the current contents of the file
 	currentContent, err := os.ReadFile(filename)
 	if err != nil {
 		return err
@@ -187,7 +137,11 @@ func getSavedBranches() (*tview.List, error) {
 		}
 	}
 
-	// Add a "Quit" item
+	return list, nil
+}
+func getGeneralCommands() (*tview.List, error) {
+
+	list := tview.NewList()
 	list.AddItem("Quit", "Press to exit", 'q', func() {
 		app.Stop()
 	})
@@ -196,4 +150,11 @@ func getSavedBranches() (*tview.List, error) {
 	})
 
 	return list, nil
+}
+func getTitle() string {
+	currentBranch, err := getCurrentBranch()
+	if err != nil {
+		panic(err)
+	}
+	return fmt.Sprintf("Current branch: %s", currentBranch)
 }
